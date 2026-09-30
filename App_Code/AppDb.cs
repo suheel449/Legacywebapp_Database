@@ -42,6 +42,24 @@ public class ActivityItem
     public DateTime CreatedAt { get; set; }
 }
 
+public class TaskItem
+{
+    public int TaskId { get; set; }
+    public string Title { get; set; }
+    public DateTime? DueDate { get; set; }
+    public string Status { get; set; }
+    public string AssignedUser { get; set; }
+}
+
+public class LoginSummary
+{
+    public int TotalLoginAttempts { get; set; }
+    public int SuccessfulLogins { get; set; }
+    public int FailedLogins { get; set; }
+    public DateTime? LastLogin { get; set; }
+    public bool HasHistory { get; set; }
+}
+
 public class DashboardStats
 {
     public int OpenTasks { get; set; }
@@ -149,6 +167,27 @@ public static class AppDb
                     cmd.ExecuteNonQuery();
                 }
 
+                const string insertPasswordHistory = @"
+                    INSERT INTO PasswordHistory (UserId, PasswordHash, ChangedDate, ChangedBy)
+                    VALUES (@UserId, @Password, NOW(), @ChangedBy)";
+                using (MySqlCommand cmd = new MySqlCommand(insertPasswordHistory, conn, tx))
+                {
+                    cmd.Parameters.Add("@UserId", MySqlDbType.Int32).Value = userId;
+                    cmd.Parameters.Add("@Password", MySqlDbType.VarChar, 255).Value = password;
+                    cmd.Parameters.Add("@ChangedBy", MySqlDbType.VarChar, 100).Value = name.Trim();
+                    cmd.ExecuteNonQuery();
+                }
+
+                const string insertAudit = @"
+                    INSERT INTO UserAudit (UserId, ActionName, ActionDate, Details)
+                    VALUES (@UserId, 'Account registered', NOW(), @Details)";
+                using (MySqlCommand cmd = new MySqlCommand(insertAudit, conn, tx))
+                {
+                    cmd.Parameters.Add("@UserId", MySqlDbType.Int32).Value = userId;
+                    cmd.Parameters.Add("@Details", MySqlDbType.Text).Value = "Account created for " + normalizedEmail;
+                    cmd.ExecuteNonQuery();
+                }
+
                 tx.Commit();
 
                 return new AppUser
@@ -160,6 +199,82 @@ public static class AppDb
                     IsActive = true
                 };
             }
+        }
+    }
+
+    public static AppUser FindUserByEmail(string email)
+    {
+        const string sql = @"
+            SELECT UserId, FullName, Email, RoleName, IsActive
+            FROM Users
+            WHERE Email = @Email";
+
+        using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+        using (MySqlCommand cmd = new MySqlCommand(sql, conn))
+        {
+            cmd.Parameters.Add("@Email", MySqlDbType.VarChar, 150).Value = email.Trim().ToLowerInvariant();
+            conn.Open();
+            using (MySqlDataReader reader = cmd.ExecuteReader())
+            {
+                if (!reader.Read())
+                {
+                    return null;
+                }
+
+                return ReadUser(reader);
+            }
+        }
+    }
+
+    public static void InsertLoginHistory(int? userId, string status, string ipAddress, string userAgent, string failureReason)
+    {
+        const string sql = @"
+            INSERT INTO LoginHistory (UserId, LoginDate, LoginStatus, IPAddress, UserAgent, FailureReason)
+            VALUES (@UserId, NOW(), @LoginStatus, @IPAddress, @UserAgent, @FailureReason)";
+
+        using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+        using (MySqlCommand cmd = new MySqlCommand(sql, conn))
+        {
+            cmd.Parameters.Add("@UserId", MySqlDbType.Int32).Value = userId.HasValue ? (object)userId.Value : DBNull.Value;
+            cmd.Parameters.Add("@LoginStatus", MySqlDbType.VarChar, 30).Value = status;
+            cmd.Parameters.Add("@IPAddress", MySqlDbType.VarChar, 50).Value = TrimToDb(ipAddress, 50);
+            cmd.Parameters.Add("@UserAgent", MySqlDbType.VarChar, 500).Value = TrimToDb(userAgent, 500);
+            cmd.Parameters.Add("@FailureReason", MySqlDbType.VarChar, 255).Value = TrimToDb(failureReason, 255);
+            conn.Open();
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public static int OpenUserSession(int userId)
+    {
+        const string sql = @"
+            INSERT INTO UserSessions (UserId, SessionToken, LoginTime, IsActive)
+            VALUES (@UserId, @SessionToken, NOW(), 1)";
+
+        using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+        using (MySqlCommand cmd = new MySqlCommand(sql, conn))
+        {
+            cmd.Parameters.Add("@UserId", MySqlDbType.Int32).Value = userId;
+            cmd.Parameters.Add("@SessionToken", MySqlDbType.VarChar, 255).Value = Guid.NewGuid().ToString("N");
+            conn.Open();
+            cmd.ExecuteNonQuery();
+            return Convert.ToInt32(cmd.LastInsertedId);
+        }
+    }
+
+    public static void CloseUserSession(int sessionId)
+    {
+        const string sql = @"
+            UPDATE UserSessions
+            SET LogoutTime = NOW(), IsActive = 0
+            WHERE SessionId = @SessionId";
+
+        using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+        using (MySqlCommand cmd = new MySqlCommand(sql, conn))
+        {
+            cmd.Parameters.Add("@SessionId", MySqlDbType.Int32).Value = sessionId;
+            conn.Open();
+            cmd.ExecuteNonQuery();
         }
     }
 
@@ -382,6 +497,70 @@ public static class AppDb
         return items;
     }
 
+    public static List<TaskItem> GetOpenTasks(int userId)
+    {
+        List<TaskItem> items = new List<TaskItem>();
+        using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+        using (MySqlCommand cmd = new MySqlCommand("usp_GetOpenTasksForUser", conn))
+        {
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("p_UserId", MySqlDbType.Int32).Value = userId;
+            conn.Open();
+            using (MySqlDataReader reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    items.Add(new TaskItem
+                    {
+                        TaskId = reader.GetInt32(reader.GetOrdinal("TaskId")),
+                        Title = reader.GetString(reader.GetOrdinal("Title")),
+                        DueDate = reader.IsDBNull(reader.GetOrdinal("DueDate"))
+                            ? (DateTime?)null
+                            : reader.GetDateTime(reader.GetOrdinal("DueDate")),
+                        Status = reader.GetString(reader.GetOrdinal("Status")),
+                        AssignedUser = reader.IsDBNull(reader.GetOrdinal("AssignedUser"))
+                            ? null
+                            : reader.GetString(reader.GetOrdinal("AssignedUser"))
+                    });
+                }
+            }
+        }
+
+        return items;
+    }
+
+    public static LoginSummary GetLoginSummary(int userId)
+    {
+        const string sql = @"
+            SELECT TotalLoginAttempts, SuccessfulLogins, FailedLogins, LastLogin
+            FROM vw_LoginSummary
+            WHERE UserId = @UserId";
+
+        using (MySqlConnection conn = new MySqlConnection(ConnectionString))
+        using (MySqlCommand cmd = new MySqlCommand(sql, conn))
+        {
+            cmd.Parameters.Add("@UserId", MySqlDbType.Int32).Value = userId;
+            conn.Open();
+            using (MySqlDataReader reader = cmd.ExecuteReader())
+            {
+                if (!reader.Read())
+                {
+                    return new LoginSummary();
+                }
+
+                int lastLoginOrdinal = reader.GetOrdinal("LastLogin");
+                return new LoginSummary
+                {
+                    TotalLoginAttempts = ReadInt(reader, reader.GetOrdinal("TotalLoginAttempts")),
+                    SuccessfulLogins = ReadInt(reader, reader.GetOrdinal("SuccessfulLogins")),
+                    FailedLogins = ReadInt(reader, reader.GetOrdinal("FailedLogins")),
+                    LastLogin = reader.IsDBNull(lastLoginOrdinal) ? (DateTime?)null : reader.GetDateTime(lastLoginOrdinal),
+                    HasHistory = true
+                };
+            }
+        }
+    }
+
     private static AppUser ReadUser(MySqlDataReader reader)
     {
         return new AppUser
@@ -397,5 +576,31 @@ public static class AppDb
     private static bool ReadBool(MySqlDataReader reader, int ordinal)
     {
         return Convert.ToBoolean(reader.GetValue(ordinal));
+    }
+
+    private static int ReadInt(MySqlDataReader reader, int ordinal)
+    {
+        if (reader.IsDBNull(ordinal))
+        {
+            return 0;
+        }
+
+        return Convert.ToInt32(reader.GetValue(ordinal));
+    }
+
+    private static object TrimToDb(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return DBNull.Value;
+        }
+
+        string trimmed = value.Trim();
+        if (trimmed.Length > maxLength)
+        {
+            trimmed = trimmed.Substring(0, maxLength);
+        }
+
+        return trimmed;
     }
 }

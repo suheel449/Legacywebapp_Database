@@ -38,6 +38,7 @@ public partial class ProfilePage : Page
             litEmail.Text = Server.HtmlEncode(user.Email);
             litRole.Text = Server.HtmlEncode(user.RoleName);
             litStatus.Text = user.IsActive ? "Active" : "Inactive";
+            ShowLoginSummary(AppDb.GetLoginSummary(userId));
         }
         catch (Exception)
         {
@@ -45,6 +46,26 @@ public partial class ProfilePage : Page
             litEmail.Text = "—";
             litRole.Text = "—";
             litStatus.Text = "—";
+            litAttempts.Text = "—";
+            litSuccessful.Text = "—";
+            litFailed.Text = "—";
+            litLastLogin.Text = "—";
         }
+    }
+
+    private void ShowLoginSummary(LoginSummary summary)
+    {
+        litAttempts.Text = summary.TotalLoginAttempts.ToString();
+        litSuccessful.Text = summary.SuccessfulLogins.ToString();
+        litFailed.Text = summary.FailedLogins.ToString();
+        if (!summary.HasHistory)
+        {
+            litLastLogin.Text = "No sign-ins recorded";
+            return;
+        }
+
+        litLastLogin.Text = summary.LastLogin.HasValue
+            ? Server.HtmlEncode(summary.LastLogin.Value.ToString("MMM d, yyyy h:mm tt"))
+            : "\u2014";
     }
 }

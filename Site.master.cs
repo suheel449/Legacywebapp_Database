@@ -25,6 +25,19 @@ public partial class SiteMaster : MasterPage
 
     protected void btnLogout_Click(object sender, EventArgs e)
     {
+        object sessionId = Session["DbSessionId"];
+        if (sessionId is int)
+        {
+            try
+            {
+                AppDb.CloseUserSession((int)sessionId);
+            }
+            catch (Exception)
+            {
+                // Sign-out still completes if the database is unavailable.
+            }
+        }
+
         Session.Clear();
         Session.Abandon();
         Response.Redirect("Login.aspx");

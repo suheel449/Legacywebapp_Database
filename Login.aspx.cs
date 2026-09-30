@@ -34,14 +34,19 @@ public partial class LoginPage : Page
             AppUser user = AppDb.Validate(email, password);
             if (user == null)
             {
+                RecordFailedLogin(email);
                 ShowMessage("Invalid email or password.", true);
                 return;
             }
+
+            AppDb.InsertLoginHistory(user.UserId, "SUCCESS", Request.UserHostAddress, Request.UserAgent, null);
+            int dbSessionId = AppDb.OpenUserSession(user.UserId);
 
             Session["UserId"] = user.UserId;
             Session["UserEmail"] = user.Email;
             Session["UserName"] = user.Name;
             Session["UserRole"] = user.RoleName;
+            Session["DbSessionId"] = dbSessionId;
 
             AppDb.LogActivity(user.UserId, "Signed in");
             Response.Redirect("Dashboard.aspx");
@@ -50,6 +55,29 @@ public partial class LoginPage : Page
         {
             ShowMessage("Unable to reach the database. Check the connection string and that LegacyBizDb exists.", true);
         }
+    }
+
+    private void RecordFailedLogin(string email)
+    {
+        AppUser known = AppDb.FindUserByEmail(email);
+        int? userId = null;
+        string reason;
+        if (known == null)
+        {
+            reason = "Unknown email";
+        }
+        else if (!known.IsActive)
+        {
+            userId = known.UserId;
+            reason = "Inactive account";
+        }
+        else
+        {
+            userId = known.UserId;
+            reason = "Invalid password";
+        }
+
+        AppDb.InsertLoginHistory(userId, "FAILED", Request.UserHostAddress, Request.UserAgent, reason);
     }
 
     private void ShowMessage(string text, bool isError)

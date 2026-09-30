@@ -50,6 +50,7 @@ public partial class DashboardPage : Page
             }
 
             litActivity.Text = html.ToString();
+            litTasks.Text = BuildTaskRows(AppDb.GetOpenTasks(userId));
         }
         catch (Exception)
         {
@@ -60,7 +61,50 @@ public partial class DashboardPage : Page
             litUnread.Text = "—";
             litTeam.Text = "—";
             litActivity.Text = "<li><strong>Could not load activity</strong><span>Check LegacyBizDb</span></li>";
+            litTasks.Text = "<tr><td colspan=\"4\">Could not load tasks from LegacyBizDb.</td></tr>";
         }
+    }
+
+    private string BuildTaskRows(List<TaskItem> tasks)
+    {
+        StringBuilder rows = new StringBuilder();
+        foreach (TaskItem task in tasks)
+        {
+            string due = task.DueDate.HasValue
+                ? task.DueDate.Value.ToString("MMM d, yyyy")
+                : "No due date";
+            string assigned = string.IsNullOrEmpty(task.AssignedUser) ? "\u2014" : task.AssignedUser;
+            rows.Append("<tr>")
+                .Append("<td>").Append(Server.HtmlEncode(task.Title)).Append("</td>")
+                .Append("<td>").Append(Server.HtmlEncode(due)).Append("</td>")
+                .Append("<td><span class=\"pill ").Append(StatusCss(task.Status)).Append("\">")
+                .Append(Server.HtmlEncode(task.Status ?? string.Empty))
+                .Append("</span></td>")
+                .Append("<td>").Append(Server.HtmlEncode(assigned)).Append("</td>")
+                .Append("</tr>");
+        }
+
+        if (rows.Length == 0)
+        {
+            rows.Append("<tr><td colspan=\"4\">No open tasks.</td></tr>");
+        }
+
+        return rows.ToString();
+    }
+
+    private static string StatusCss(string status)
+    {
+        if (string.Equals(status, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ok";
+        }
+
+        if (string.Equals(status, "Open", StringComparison.OrdinalIgnoreCase))
+        {
+            return "warn";
+        }
+
+        return "muted";
     }
 
     private int GetUserId()

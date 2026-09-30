@@ -28,6 +28,26 @@
     </article>
   </section>
 
+  <article class="card">
+    <h2>Your tasks</h2>
+    <p class="subtitle">Open work assigned to you.</p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Due</th>
+            <th>Status</th>
+            <th>Assigned to</th>
+          </tr>
+        </thead>
+        <tbody>
+          <asp:Literal ID="litTasks" runat="server" />
+        </tbody>
+      </table>
+    </div>
+  </article>
+
   <section class="split-grid">
     <article class="card">
       <h2>Quick actions</h2>

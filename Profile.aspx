@@ -26,4 +26,28 @@
       </div>
     </dl>
   </article>
+
+  <article class="card">
+    <h2>Sign-in summary</h2>
+    <p class="subtitle">Loaded from login history.</p>
+
+    <dl class="profile">
+      <div>
+        <dt>Total attempts</dt>
+        <dd><asp:Literal ID="litAttempts" runat="server" Text="0" /></dd>
+      </div>
+      <div>
+        <dt>Successful</dt>
+        <dd><asp:Literal ID="litSuccessful" runat="server" Text="0" /></dd>
+      </div>
+      <div>
+        <dt>Failed</dt>
+        <dd><asp:Literal ID="litFailed" runat="server" Text="0" /></dd>
+      </div>
+      <div>
+        <dt>Last sign-in</dt>
+        <dd><asp:Literal ID="litLastLogin" runat="server" Text="No sign-ins recorded" /></dd>
+      </div>
+    </dl>
+  </article>
 </asp:Content>
