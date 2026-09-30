@@ -11,6 +11,10 @@ public partial class LoginPage : Page
             return;
         }
 
+        form1.Attributes["autocomplete"] = "off";
+        txtEmail.Attributes["autocomplete"] = "off";
+        txtPassword.Attributes["autocomplete"] = "new-password";
+
         if (!IsPostBack)
         {
             txtEmail.Text = "demo@legacyauth.local";
@@ -49,11 +53,16 @@ public partial class LoginPage : Page
             Session["DbSessionId"] = dbSessionId;
 
             AppDb.LogActivity(user.UserId, "Signed in");
-            Response.Redirect("Dashboard.aspx");
+            Response.Redirect("Dashboard.aspx", false);
+            Context.ApplicationInstance.CompleteRequest();
         }
-        catch (Exception)
+        catch (System.Threading.ThreadAbortException)
         {
-            ShowMessage("Unable to reach the database. Check the connection string and that LegacyBizDb exists.", true);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage("Unable to sign in. " + ex.Message, true);
         }
     }
 

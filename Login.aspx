@@ -1,4 +1,4 @@
-<%@ Page Language="C#" AutoEventWireup="true" CodeFile="Login.aspx.cs" Inherits="LoginPage" %>
+<%@ Page Language="C#" AutoEventWireup="true" CodeFile="Login.aspx.cs" Inherits="LoginPage" EnableEventValidation="false" %>
 
 <!DOCTYPE html>
 <html lang="en">
@@ -45,6 +45,14 @@
         </p>
       </main>
     </div>
+    <script>
+      (function () {
+        var password = document.getElementById("txtPassword");
+        if (password && !password.value) {
+          password.value = "demo123";
+        }
+      })();
+    </script>
   </form>
 </body>
 </html>
